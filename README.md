@@ -1,11 +1,14 @@
 # Observer Pattern in C++
+
 This repository implements the **Observer Pattern** in C++ with automatic memory management using `std::weak_ptr` and `std::shared_ptr`. It provides a flexible way to manage observers and subjects, including both typed and untyped (void) observers, while automatically cleaning up expired (dead) observers.
 
+## Requirements
+- C++11 or later
+
 ## Features
-- **Observer Pattern**: Implements the classic observer pattern where subjects notify observers of updates.
-- **Automatic Cleanup**: Uses `std::weak_ptr` to avoid memory leaks and ensures observers that have expired (i.e., the `shared_ptr` managing them is no longer valid) are automatically removed from the subject's list of observers.
-- **Support for `void` Specialization**: Handles both typed observers (e.g., `Observer<int>`) and the special `Observer<void>`, where no data is passed to the observers.
-- **Efficient Memory Management**: Observers are stored as weak pointers, so the subject won't extend the observer's lifetime unnecessarily. Expired observers are cleaned up automatically during each notification cycle.
+- **Memory Safe**: Automatically clears expired observers using weak pointers.
+- **Flexible**: Can handle both typed and untyped observers.
+- **Efficient**: Avoids duplicates in the observer list and removes expired references when notifying observers.
 
 ## How it Works
 
@@ -23,23 +26,28 @@ This repository implements the **Observer Pattern** in C++ with automatic memory
 - Handles registering and removing observers and automatically cleans up expired references before sending updates.
 
 ### `void` Specialization
-- A specialization of `Observer<void>` and `Subject<void>` is provided for cases where no data needs to be passed to observers.
+- A specialization of `Observer<void>` and `Subject<void>` (namely `SimpleObserver` and `SimpleSubject`) is provided for cases where no data needs to be passed to observers.
 
 ## Usage Example
 
-### 1. Observer with no parameters
+### 1. **Observer with No Parameters**
+
+This example demonstrates the most basic use case where the observer does not require any parameters for the `update()` method.
+
+<details>
+<summary>Click to expand code example</summary>
 
 ```cpp
 #include "Observer.h"
 
-class Model: public SimpleSubject {
+class Model : public SimpleSubject {
 	public:
 		void applyChanges() {
 			notifyAll();
 		}
 };
 
-class View: public simpleObserver {
+class View : public SimpleObserver {
 	public:
 		void update() override {
 			std::cout << "View: updated\n";
@@ -53,26 +61,34 @@ model->registerObserver(view);
 model->applyChanges();
 ```
 
-### 2. Observer with parameters
+#### Output:
+```
+View: updated
+```
+
+</details>
+
+### 2. **Observer with One Parameter (Temperature)**
+
+In this example, the observer reacts to a change in temperature, which is passed as an argument to the update method.
+
+<details>
+<summary>Click to expand code example</summary>
 
 ```cpp
 #include "Observer.h"
 
-struct Temperature {
-	float value;
-};
-
-class TemperatureSensor: public Subject<Temperature> {
+class TemperatureSensor : public Subject<float> {
 	public:
 		void setTemperature(float temp) {
-			notifyAll(Temperature { temp });
+			notifyAll(temp);
 		}
 };
 
-class Display: public Observer<Temperature> {
+class Display : public Observer<float> {
 	public:
-		void update(const Temperature& data) override {
-			std::cout << "Temperature: " << data.value << "C\n";
+		void update(const float& val) override {
+			std::cout << "Temperature: " << val << "C\n";
 		}
 };
 
@@ -83,15 +99,131 @@ sensor->registerObserver(display);
 sensor->setTemperature(25.0f);
 ```
 
-## Features
+#### Output:
+```
+Temperature: 25C
+```
 
-- **Memory Safe**: Automatically clears expired observers using weak pointers.
-- **Flexible**: Can handle both typed and untyped observers.
-- **Efficient**: Avoids duplicates in the observer list and removes expired references when notifying observers.
+</details>
 
-## Requirements
+### 3. **Observer with Multiple Parameters (float, float, std::string)**
 
-- C++11 or later
+This example demonstrates the observer pattern with multiple parameters: temperature, humidity, and weather condition. 
+The observer handles all these parameters in the update method.
+
+<details>
+<summary>Click to expand code example</summary>
+
+```cpp
+#include "Observer.h"
+
+class WeatherStation : public Subject<float, float, std::string> {
+	public:
+		void setWeather(float temperature, float humidity, const std::string& condition) {
+			notifyAll(temperature, humidity, condition);
+		}
+};
+
+class WeatherDisplay : public Observer<float, float, std::string> {
+	public:
+		void update(const float& temperature, const float& humidity, const std::string& condition) override {
+			std::cout << "Weather Update: \n";
+			std::cout << "Temperature: " << temperature << "C\n";
+			std::cout << "Humidity: " << humidity << "%\n";
+			std::cout << "Condition: " << condition << "\n";
+		}
+};
+
+auto station = std::make_shared<WeatherStation>();
+auto display = std::make_shared<WeatherDisplay>();
+
+station->registerObserver(display);
+
+station->setWeather(25.5f, 60.0f, "Sunny");
+station->setWeather(18.3f, 75.0f, "Cloudy");
+```
+
+#### Output:
+```
+Weather Update: 
+Temperature: 25.5C
+Humidity: 60%
+Condition: Sunny
+
+Weather Update: 
+Temperature: 18.3C
+Humidity: 75%
+Condition: Cloudy
+```
+
+</details>
+
+### 4. **Observer with Struct Parameters (Sensor Data)**
+
+This example demonstrates how to use the observer pattern with a more complex data type, such as a struct, to store multiple related properties like temperature and humidity.
+
+<details>
+<summary>Click to expand code example</summary>
+
+```cpp
+#include "Observer.h"
+
+struct SensorData {
+	float temperature;
+	float humidity;
+};
+
+class Sensor : public Subject<SensorData> {
+	public:
+		void setTemperature(float t) {
+			temp = t;
+			notifyAll({ temp, hum });
+		}
+		void setHumidity(float h) {
+			hum = h;
+			notifyAll({ temp, hum });
+		}
+	private:
+		float temp { 0.0f };
+		float hum { 0.0f };
+};
+
+class Display : public Observer<SensorData> {
+	public:
+		void update(const SensorData& data) override {
+			std::cout << "Temperature: " << data.temperature << "C\n";
+			std::cout << "Humidity: " << data.humidity << "%\n";
+		}
+};
+
+auto sensor = std::make_shared<Sensor>();
+auto display = std::make_shared<Display>();
+
+sensor->registerObserver(display);
+sensor->setTemperature(420.0f);
+sensor->setHumidity(69.0f);
+```
+
+#### Output:
+```
+Temperature: 420C
+Humidity: 69%
+```
+
+</details>
+
+---
+
+## Conclusion
+
+The Observer design pattern is an essential pattern for handling dynamic updates between objects in a loosely coupled way. With the examples provided, you can see how to:
+
+1. Use simple observers without parameters.
+2. Pass parameters to observers when needed.
+3. Handle multiple parameters in the observer's `update` method.
+4. Use complex data structures like structs for more organized data flow.
+
+These examples should serve as a solid foundation for implementing the Observer pattern in C++ in various scenarios. Feel free to modify the code to suit your application's needs!
 
 ## License
 

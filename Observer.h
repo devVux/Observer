@@ -4,8 +4,8 @@
 #include <vector>
 #include <algorithm>
 
-template <class T> class Subject;
-template <class T> class Observer;
+template <class T, class... U> class Subject;
+template <class T, class... U> class Observer;
 
 template <class T>
 class AutoCleanup {
@@ -78,46 +78,47 @@ class AutoCleanup {
 };
 
 
-template <class T>
-class Observer: public std::enable_shared_from_this<Observer<T>> {
+template <class T, class... U>
+class Observer: public std::enable_shared_from_this<Observer<T, U...>> {
 
 	public:
 
 		virtual ~Observer() = default;
 
-		virtual void update(const T& data) = 0;
+		virtual void update(const T&, const U&...) = 0;
 
 };
 
-template <class T>
-class Subject: public std::enable_shared_from_this<Subject<T>> {
-	
+template <class T, class... U>
+class Subject: public std::enable_shared_from_this<Subject<T, U...>> {
+	using Obs = Observer<T, U...>;
+
 	public:
 
-		void registerObserver(std::shared_ptr<Observer<T>> observer) {
+		void registerObserver(std::shared_ptr<Obs> observer) {
 			mObservers.addReference(observer);
 		}
 
-		void removeObserver(std::shared_ptr<Observer<T>> observer) {
+		void removeObserver(std::shared_ptr<Obs> observer) {
 			mObservers.removeReference(observer);
 		}
 
 
 	protected:
 
-		virtual void notifyAll(const T& data) {
+		virtual void notifyAll(const T& data, const U&... other) {
 			mObservers.clearExpired();
 			
 			for (const auto& weakObs : mObservers)
 				if (auto observer = weakObs.lock())
-					observer->update(data);
+					observer->update(data, other...);
 
 		}
 
 
 	protected:
 		
-		AutoCleanup<Observer<T>> mObservers;
+		AutoCleanup<Obs> mObservers;
 
 };
 
@@ -170,5 +171,5 @@ class Subject<void>: public std::enable_shared_from_this<Subject<void>> {
 
 
 using SimpleSubject = Subject<void>;
-using simpleObserver = Observer<void>;
+using SimpleObserver = Observer<void>;
 

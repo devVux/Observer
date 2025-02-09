@@ -2,13 +2,84 @@
 
 #include <memory>
 #include <vector>
+#include <algorithm>
 
 template <class T> class Subject;
 template <class T> class Observer;
 
 template <class T>
+class AutoCleanup {
+
+	public:
+
+		virtual ~AutoCleanup() = default;
+
+		bool addReference(std::weak_ptr<T> ref) {
+			if (auto target = ref.lock()) {
+				auto it = std::find_if(mReferences.begin(), mReferences.end(), [&target](const auto& weakRef) {
+					auto ptr = weakRef.lock();
+					return ptr && ptr == target;
+				});
+
+				if (it == mReferences.end()) {
+					mReferences.push_back(target);
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		bool removeReference(std::weak_ptr<T> object) {
+			if (auto targetObject = object.lock()) {
+				const std::size_t oldSize = mReferences.size();
+				mReferences.erase(
+					std::remove_if(mReferences.begin(), mReferences.end(), [&targetObject](const auto& weakObject) {
+						auto ptr = weakObject.lock();
+						return !ptr || ptr == targetObject;
+					}),
+					mReferences.end()
+				);
+
+				return mReferences.size() < oldSize;
+			}
+
+			return false;
+		}
+	
+		void clearExpired() {
+			mReferences.erase(
+				std::remove_if(mReferences.begin(), mReferences.end(), [](const auto& weakObs) {
+					return weakObs.expired();
+				}),
+				mReferences.end()
+			);
+		}
+
+
+		template <class F, class... Args>
+		void callOnValidRefs(F&& func, Args&&... args) {
+			for (const auto& weakRef : mReferences)
+				if (auto ref = weakRef.lock())
+					(ref.get()->*func)(std::forward<Args>(args)...);
+		}
+
+
+		auto begin() { return mReferences.begin(); }
+		auto end() { return mReferences.end(); }
+		auto begin() const { return mReferences.begin(); }
+		auto end() const { return mReferences.end(); }
+
+
+	private:
+
+		std::vector<std::weak_ptr<T>> mReferences;
+
+};
+
+
+template <class T>
 class Observer: public std::enable_shared_from_this<Observer<T>> {
-	friend class Subject<T>;
 
 	public:
 
@@ -16,106 +87,44 @@ class Observer: public std::enable_shared_from_this<Observer<T>> {
 
 		virtual void update(const T& data) = 0;
 
-
-	private:
-
-		void addSubject(std::weak_ptr<Subject<T>> subject) {
-			mSubjects.push_back(subject);
-		}
-
-		void removeSubject(std::weak_ptr<Subject<T>> subject) {
-			if (auto targetSubject = subject.lock()) {
-				mSubjects.erase(
-					std::remove_if(mSubjects.begin(), mSubjects.end(), [&targetSubject](const auto& weakSubject) {
-						auto ptr = weakSubject.lock();
-						return !ptr || ptr == targetSubject;
-					}),
-					mSubjects.end()
-				);
-			}
-		}
-
-
-	private:
-
-		// Track subjects this observer is registered to for automatic cleanup
-		std::vector<std::weak_ptr<Subject<T>>> mSubjects;
-
 };
 
 template <class T>
-class Subject : public std::enable_shared_from_this<Subject<T>> {
-
-
+class Subject: public std::enable_shared_from_this<Subject<T>> {
+	
 	public:
 
-		virtual ~Subject() {
-			// Notify observers that this subject is being destroyed
-			for (const auto& weakObs : mObservers)
-				if (auto observer = weakObs.lock())
-					observer->removeSubject(this->shared_from_this());
-		}
-
 		void registerObserver(std::shared_ptr<Observer<T>> observer) {
-			if (!observer)
-				return;
-
-			auto it = std::find_if(mObservers.begin(), mObservers.end(), [&observer](const auto& weakObs) {
-				auto ptr = weakObs.lock();
-				return ptr && ptr == observer;
-			});
-
-			if (it == mObservers.end()) {
-				mObservers.push_back(observer);
-				observer->addSubject(this->shared_from_this());
-			}
+			mObservers.addReference(observer);
 		}
 
 		void removeObserver(std::shared_ptr<Observer<T>> observer) {
-			if (!observer)
-				return;
-
-			mObservers.erase(
-				std::remove_if(mObservers.begin(), mObservers.end(), [&observer](const auto& weakObs) {
-					auto ptr = weakObs.lock();
-					return !ptr || ptr == observer;
-				}),
-				mObservers.end()
-			);
-			observer->removeSubject(this->shared_from_this());
+			mObservers.removeReference(observer);
 		}
 
 
 	protected:
 
 		virtual void notifyAll(const T& data) {
-			mObservers.erase(
-				std::remove_if(mObservers.begin(), mObservers.end(), [](const auto& weakObs) {
-					return weakObs.expired();
-				}),
-				mObservers.end()
-			);
-
+			mObservers.clearExpired();
+			
 			for (const auto& weakObs : mObservers)
 				if (auto observer = weakObs.lock())
 					observer->update(data);
+
 		}
 
 
 	protected:
-
-		std::vector<std::weak_ptr<Observer<T>>> mObservers;
+		
+		AutoCleanup<Observer<T>> mObservers;
 
 };
 
 
 
-
-
-
 template <>
 class Observer<void>: public std::enable_shared_from_this<Observer<void>> {
-	friend class Subject<void>;
 
 	public:
 
@@ -123,98 +132,43 @@ class Observer<void>: public std::enable_shared_from_this<Observer<void>> {
 
 		virtual void update() = 0;
 
-
-	private:
-
-		void addSubject(std::weak_ptr<Subject<void>> subject) {
-			mSubjects.push_back(subject);
-		}
-
-		void removeSubject(std::weak_ptr<Subject<void>> subject) {
-			if (auto targetSubject = subject.lock()) {
-				mSubjects.erase(
-					std::remove_if(mSubjects.begin(), mSubjects.end(), [&targetSubject](const auto& weakSubject) {
-						auto ptr = weakSubject.lock();
-						return !ptr || ptr == targetSubject;
-					}),
-					mSubjects.end()
-				);
-			}
-		}
-
-
-	private:
-
-		// Track subjects this observer is registered to for automatic cleanup
-		std::vector<std::weak_ptr<Subject<void>>> mSubjects;
-
 };
 
 
 template <>
 class Subject<void>: public std::enable_shared_from_this<Subject<void>> {
 
+
 	public:
 
-		virtual ~Subject() {
-			// Notify observers that this subject is being destroyed
-			for (const auto& weakObs : mObservers)
-				if (auto observer = weakObs.lock())
-					observer->removeSubject(this->shared_from_this());
-		}
-
 		void registerObserver(std::shared_ptr<Observer<void>> observer) {
-			if (!observer)
-				return;
-
-			auto it = std::find_if(mObservers.begin(), mObservers.end(), [&observer](const auto& weakObs) {
-				auto ptr = weakObs.lock();
-				return ptr && ptr == observer;
-			});
-
-			if (it == mObservers.end()) {
-				mObservers.push_back(observer);
-				observer->addSubject(this->shared_from_this());
-			}
+			mObservers.addReference(observer);
 		}
 
 		void removeObserver(std::shared_ptr<Observer<void>> observer) {
-			if (!observer)
-				return;
-
-			mObservers.erase(
-				std::remove_if(mObservers.begin(), mObservers.end(), [&observer](const auto& weakObs) {
-					auto ptr = weakObs.lock();
-					return !ptr || ptr == observer;
-				}),
-				mObservers.end()
-			);
-			observer->removeSubject(this->shared_from_this());
+			mObservers.removeReference(observer);
 		}
 
 
-	protected:
+		protected:
 
 		virtual void notifyAll() {
-			mObservers.erase(
-				std::remove_if(mObservers.begin(), mObservers.end(), [](const auto& weakObs) {
-					return weakObs.expired();
-				}),
-				mObservers.end()
-			);
+			mObservers.clearExpired();
 
 			for (const auto& weakObs : mObservers)
 				if (auto observer = weakObs.lock())
 					observer->update();
+
 		}
 
 
 	protected:
 
-		std::vector<std::weak_ptr<Observer<void>>> mObservers;
+		AutoCleanup<Observer<void>> mObservers;
 
 };
 
 
-using SubjectNoParameters = Subject<void>;
-using ObserverNoParameters = Observer<void>;
+using SimpleSubject = Subject<void>;
+using simpleObserver = Observer<void>;
+

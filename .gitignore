@@ -5,4 +5,8 @@
 /.vs
 /.vscode
 
+/CMakeFiles
+CmakeCache.txt
+
 main.exe
+/build

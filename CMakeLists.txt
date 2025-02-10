@@ -19,4 +19,5 @@ set(SOURCES
 
 add_executable(main ${SOURCES} ${HEADERS})
 
+enable_testing()
 add_subdirectory(tests)

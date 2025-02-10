@@ -10,7 +10,7 @@ void example1() {
 			}
 	};
 
-	class View: public simpleObserver {
+	class View: public SimpleObserver {
 		public:
 			void update() override {
 				std::cout << "View: updated\n";

@@ -28,6 +28,7 @@ jobs:
           cxx-compiler: clang++
           options: |
             BUILD_TESTS=ON
+            CMAKE_BUILD_TYPE=Release
 
       - name: Run Tests
         run: |

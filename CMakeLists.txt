@@ -19,5 +19,7 @@ set(SOURCES
 
 add_executable(main ${SOURCES} ${HEADERS})
 
-enable_testing()
-add_subdirectory(tests)
+if(BUILD_TESTS STREQUAL "ON")
+	enable_testing()
+	add_subdirectory(tests)
+endif()

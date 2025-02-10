@@ -11,28 +11,20 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-24.04
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v4.2.2
 
-    - name: Set up CMake
-      uses: dante-ev/cmake-action@v2
-      with:
-        cmake-version: '3.21.0'
+      - name: Setup CMake
+        uses: threeal/cmake-action@v2.1.0
+        with:
+          generator: Ninja
+          cxx-compiler: clang++
+          options: |
+            BUILD_TESTS=ON
 
-    - name: Install Ninja
-      run: sudo apt-get install ninja-build
-
-    - name: Set up build directory
-      run: mkdir -p build
-
-    - name: Configure the project with CMake (using Ninja)
-      run: cmake -S . -B ./build -G Ninja -DCMAKE_BUILD_TYPE=Release
-
-    - name: Build the project with Ninja
-      run: cd build && cmake --build .
-
-    - name: Run tests
-      run: ctest --verbose
+      - name: Run Tests
+        run: |
+          cd build
+          ctest --output-on-failure

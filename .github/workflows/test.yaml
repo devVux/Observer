@@ -22,6 +22,8 @@ jobs:
       - name: Setup CMake
         uses: threeal/cmake-action@v2.1.0
         with:
+          source-dir: .
+          build-dir: ./build
           generator: Ninja
           cxx-compiler: clang++
           options: |
